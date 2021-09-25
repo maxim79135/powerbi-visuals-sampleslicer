@@ -28,7 +28,6 @@
 import { Selection as D3Selection } from "d3";
 type Selection<T> = D3Selection<any, T, any, any>;
 
-
 import powerbiVisualsApi from "powerbi-visuals-api";
 import IViewport = powerbiVisualsApi.IViewport;
 
@@ -40,323 +39,329 @@ import createClassAndSelector = CssConstants.createClassAndSelector;
 import { SampleSlicerDataPoint } from "./sampleSlicer";
 
 export interface ITableView {
-    data(data: any[], dataIdFunction: (d) => {}, dataAppended: boolean): ITableView;
-    rowHeight(rowHeight: number): ITableView;
-    columnWidth(columnWidth: number): ITableView;
-    rows(rows: number): ITableView;
-    columns(columns: number): ITableView;
-    viewport(viewport: IViewport): ITableView;
-    render(): void;
-    empty(): void;
-    computedColumns: number;
-    computedRows: number;
+  data(
+    data: any[],
+    dataIdFunction: (d) => {},
+    dataAppended: boolean
+  ): ITableView;
+  rowHeight(rowHeight: number): ITableView;
+  columnWidth(columnWidth: number): ITableView;
+  rows(rows: number): ITableView;
+  columns(columns: number): ITableView;
+  viewport(viewport: IViewport): ITableView;
+  render(): void;
+  empty(): void;
+  computedColumns: number;
+  computedRows: number;
 }
 
 export module TableViewFactory {
-    export function createTableView(options): ITableView {
-        return new TableView(options);
-    }
+  export function createTableView(options): ITableView {
+    return new TableView(options);
+  }
 }
 
 export interface TableViewOptions {
-    onEnter: (selection: Selection<any>) => void;
-    onExit: (selection: Selection<any>) => void;
-    onUpdate: (selection: Selection<any>) => void;
-    baseContainer: Selection<any>;
-    rowHeight: number;
-    columnWidth: number;
-    rows: number;
-    columns: number;
-    viewport: IViewport;
-    scrollEnabled: boolean;
+  onEnter: (selection: Selection<any>) => void;
+  onExit: (selection: Selection<any>) => void;
+  onUpdate: (selection: Selection<any>) => void;
+  baseContainer: Selection<any>;
+  rowHeight: number;
+  columnWidth: number;
+  rows: number;
+  columns: number;
+  viewport: IViewport;
+  scrollEnabled: boolean;
 }
 
 export interface TableViewGroupedData {
-    data: any[];
-    totalColumns: number;
-    totalRows: number;
+  data: any[];
+  totalColumns: number;
+  totalRows: number;
 }
 
 export interface TableViewComputedOptions {
-    columns: number;
-    rows: number;
+  columns: number;
+  rows: number;
 }
-
 
 /**
  * A UI Virtualized List, that uses the D3 Enter, Update & Exit pattern to update rows.
  * It can create lists containing either HTML or SVG elements.
  */
 export class TableView implements ITableView {
-    public static RowSelector: ClassAndSelector = createClassAndSelector('row');
-    public static CellSelector: ClassAndSelector = createClassAndSelector('cell');
+  public static RowSelector: ClassAndSelector = createClassAndSelector("row");
+  public static CellSelector: ClassAndSelector = createClassAndSelector("cell");
 
-    private static defaultRowHeight = 0;
-    private static defaultColumns = 1;
+  private static defaultRowHeight = 0;
+  private static defaultColumns = 1;
 
-    private getDatumIndex: (d: any) => {};
-    private _data: any[];
-    private _totalRows: number;
-    private _totalColumns: number;
+  private getDatumIndex: (d: any) => {};
+  private _data: any[];
+  private _totalRows: number;
+  private _totalColumns: number;
 
-    private options: TableViewOptions;
-    private visibleGroupContainer: Selection<any>;
-    private scrollContainer: Selection<any>;
+  private options: TableViewOptions;
+  private visibleGroupContainer: Selection<any>;
+  private scrollContainer: Selection<any>;
 
-    private computedOptions: TableViewComputedOptions;
+  private computedOptions: TableViewComputedOptions;
 
-    public constructor(options: TableViewOptions) {
-        // make a copy of options so that it is not modified later by caller
-        this.options = { ...options };
+  public constructor(options: TableViewOptions) {
+    // make a copy of options so that it is not modified later by caller
+    this.options = { ...options };
 
-        this.options.baseContainer
-            .style('overflow-y', 'auto')
-            .attr('drag-resize-disabled', true);
+    this.options.baseContainer
+      .style("overflow-y", "auto")
+      .attr("drag-resize-disabled", true);
 
-        this.scrollContainer = options.baseContainer
-            .append('div')
-            .attr('class', 'scrollRegion');
+    this.scrollContainer = options.baseContainer
+      .append("div")
+      .attr("class", "scrollRegion");
 
-        this.visibleGroupContainer = this.scrollContainer
-            .append('div')
-            .attr('class', 'visibleGroup');
+    this.visibleGroupContainer = this.scrollContainer
+      .append("div")
+      .attr("class", "visibleGroup");
 
-        TableView.SetDefaultOptions(options);
+    TableView.SetDefaultOptions(options);
+  }
 
+  private static SetDefaultOptions(options: TableViewOptions) {
+    options.rowHeight = options.rowHeight || TableView.defaultRowHeight;
+  }
+
+  public get computedColumns(): number {
+    return this.computedOptions ? this.computedOptions.columns : 0;
+  }
+
+  public get computedRows(): number {
+    return this.computedOptions ? this.computedOptions.rows : 0;
+  }
+
+  public rowHeight(rowHeight: number): TableView {
+    this.options.rowHeight = Math.ceil(rowHeight);
+
+    return this;
+  }
+
+  public columnWidth(columnWidth: number): TableView {
+    this.options.columnWidth = Math.ceil(columnWidth);
+
+    return this;
+  }
+
+  public rows(rows: number): TableView {
+    this.options.rows = Math.ceil(rows);
+
+    return this;
+  }
+
+  public columns(columns: number): TableView {
+    this.options.columns = Math.ceil(columns);
+
+    return this;
+  }
+
+  public data(
+    data: any[],
+    getDatumIndex: (d: any) => {},
+    dataReset: boolean = false
+  ): ITableView {
+    this._data = data;
+    this.getDatumIndex = getDatumIndex;
+    this.setTotalRows();
+
+    return this;
+  }
+
+  public viewport(viewport: IViewport): ITableView {
+    this.options.viewport = viewport;
+
+    return this;
+  }
+
+  public empty(): ITableView {
+    this._data = [];
+    this.render();
+
+    return this;
+  }
+
+  private setTotalRows(): void {
+    let count: number = this._data.length,
+      rows: number = Math.min(this.options.rows, count),
+      columns: number = Math.min(this.options.columns, count);
+
+    if (columns > 0 && rows > 0) {
+      this._totalColumns = columns;
+      this._totalRows = rows;
+    } else if (rows > 0) {
+      this._totalRows = rows;
+      this._totalColumns = Math.ceil(count / rows);
+    } else if (columns > 0) {
+      this._totalColumns = columns;
+      this._totalRows = Math.ceil(count / columns);
+    } else {
+      this._totalColumns = TableView.defaultColumns;
+      this._totalRows = Math.ceil(count / TableView.defaultColumns);
+    }
+  }
+
+  private getGroupedData(): TableViewGroupedData {
+    let options: TableViewOptions = this.options,
+      groupedData: any[] = [],
+      totalItems: number = this._data.length,
+      totalRows: number = options.rows > totalItems ? totalItems : options.rows,
+      totalColumns: number =
+        options.columns > totalItems ? totalItems : options.columns;
+
+    if (totalColumns === 0 && totalRows === 0) {
+      totalColumns = totalItems;
+      totalRows = 1;
+    } else if (totalColumns === 0 && totalRows > 0) {
+      totalColumns = Math.ceil(totalItems / totalRows);
+    } else if (totalColumns > 0 && totalRows === 0) {
+      totalRows = Math.ceil(totalItems / totalColumns);
     }
 
-    private static SetDefaultOptions(options: TableViewOptions) {
-        options.rowHeight = options.rowHeight || TableView.defaultRowHeight;
+    if (totalRows === 0) {
+      totalRows = this._totalRows;
     }
 
-    public get computedColumns(): number {
-        return this.computedOptions
-            ? this.computedOptions.columns
-            : 0;
+    if (totalColumns === 0) {
+      totalColumns = this._totalColumns;
     }
 
-    public get computedRows(): number {
-        return this.computedOptions
-            ? this.computedOptions.rows
-            : 0;
-    }
+    let m: number = 0,
+      k: number = 0;
 
-    public rowHeight(rowHeight: number): TableView {
-        this.options.rowHeight = Math.ceil(rowHeight);
+    for (let i: number = 0; i < totalRows; i++) {
+      if (
+        options.columns === 0 &&
+        totalItems % options.rows > 0 &&
+        options.rows <= totalItems
+      ) {
+        if (totalItems % options.rows > i) {
+          m = i * Math.ceil(totalItems / options.rows);
+          k = m + Math.ceil(totalItems / options.rows);
 
-        return this;
-    }
-
-    public columnWidth(columnWidth: number): TableView {
-        this.options.columnWidth = Math.ceil(columnWidth);
-
-        return this;
-    }
-
-    public rows(rows: number): TableView {
-        this.options.rows = Math.ceil(rows);
-
-        return this;
-    }
-
-    public columns(columns: number): TableView {
-        this.options.columns = Math.ceil(columns);
-
-        return this;
-    }
-
-    public data(data: any[], getDatumIndex: (d: any) => {}, dataReset: boolean = false): ITableView {
-        this._data = data;
-        this.getDatumIndex = getDatumIndex;
-        this.setTotalRows();
-
-        return this;
-    }
-
-    public viewport(viewport: IViewport): ITableView {
-        this.options.viewport = viewport;
-
-        return this;
-    }
-
-    public empty(): ITableView {
-        this._data = [];
-        this.render();
-
-        return this;
-    }
-
-    private setTotalRows(): void {
-        let count: number = this._data.length,
-            rows: number = Math.min(this.options.rows, count),
-            columns: number = Math.min(this.options.columns, count);
-
-        if ((columns > 0) && (rows > 0)) {
-            this._totalColumns = columns;
-            this._totalRows = rows;
-        } else if (rows > 0) {
-            this._totalRows = rows;
-            this._totalColumns = Math.ceil(count / rows);
-        } else if (columns > 0) {
-            this._totalColumns = columns;
-            this._totalRows = Math.ceil(count / columns);
+          this.addDataToArray(groupedData, this._data, m, k);
         } else {
-            this._totalColumns = TableView.defaultColumns;
-            this._totalRows = Math.ceil(count / TableView.defaultColumns);
+          this.addDataToArray(
+            groupedData,
+            this._data,
+            k,
+            k + Math.floor(totalItems / options.rows)
+          );
+
+          k = k + Math.floor(totalItems / options.rows);
         }
+      } else {
+        let k: number = i * totalColumns;
+
+        this.addDataToArray(groupedData, this._data, k, k + totalColumns);
+      }
     }
 
-    private getGroupedData(): TableViewGroupedData {
-        let options: TableViewOptions = this.options,
-            groupedData: any[] = [],
-            totalItems: number = this._data.length,
-            totalRows: number = options.rows > totalItems
-                ? totalItems
-                : options.rows,
-            totalColumns: number = options.columns > totalItems
-                ? totalItems
-                : options.columns;
+    this.computedOptions = this.getComputedOptions(groupedData);
 
-        if (totalColumns === 0 && totalRows === 0) {
-            totalColumns = totalItems;
-            totalRows = 1;
-        } else if (totalColumns === 0 && totalRows > 0) {
-            totalColumns = Math.ceil(totalItems / totalRows);
-        } else if (totalColumns > 0 && totalRows === 0) {
-            totalRows = Math.ceil(totalItems / totalColumns);
-        }
+    return {
+      data: groupedData,
+      totalColumns: totalColumns,
+      totalRows: totalRows,
+    };
+  }
 
-        if (totalRows === 0) {
-            totalRows = this._totalRows;
-        }
-
-        if (totalColumns === 0) {
-            totalColumns = this._totalColumns;
-        }
-
-
-        let m: number = 0,
-            k: number = 0;
-
-        for (let i: number = 0; i < totalRows; i++) {
-            if (options.columns === 0
-                && totalItems % options.rows > 0
-                && options.rows <= totalItems) {
-
-                if (totalItems % options.rows > i) {
-                    m = i * Math.ceil(totalItems / options.rows);
-                    k = m + Math.ceil(totalItems / options.rows);
-
-                    this.addDataToArray(groupedData, this._data, m, k);
-                } else {
-                    this.addDataToArray(groupedData, this._data, k, k + Math.floor(totalItems / options.rows));
-
-                    k = k + Math.floor(totalItems / options.rows);
-                }
-            } else {
-                let k: number = i * totalColumns;
-
-                this.addDataToArray(groupedData, this._data, k, k + totalColumns);
-            }
-        }
-
-        this.computedOptions = this.getComputedOptions(groupedData);
-
-        return {
-            data: groupedData,
-            totalColumns: totalColumns,
-            totalRows: totalRows
-        };
+  private addDataToArray(
+    array: any[],
+    data: any[],
+    start: number,
+    end: number
+  ): void {
+    if (!array || !data) {
+      return;
     }
 
-    private addDataToArray(array: any[], data: any[], start: number, end: number): void {
-        if (!array || !data) {
-            return;
-        }
+    let elements: any[] = data.slice(start, end);
 
-        let elements: any[] = data.slice(start, end);
+    if (elements && elements.length > 0) {
+      array.push(elements);
+    }
+  }
 
-        if (elements && elements.length > 0) {
-            array.push(elements);
-        }
+  private getComputedOptions(data: any[]): TableViewComputedOptions {
+    let rows: number,
+      columns: number = 0;
+
+    rows = data ? data.length : 0;
+
+    for (let i: number = 0; i < rows; i++) {
+      let currentRow: any[] = data[i];
+
+      if (currentRow && currentRow.length > columns) {
+        columns = currentRow.length;
+      }
     }
 
-    private getComputedOptions(data: any[]): TableViewComputedOptions {
-        let rows: number,
-            columns: number = 0;
+    return {
+      columns: columns,
+      rows: rows,
+    };
+  }
 
-        rows = data
-            ? data.length
-            : 0;
+  public render(): void {
+    let options: TableViewOptions = this.options,
+      visibleGroupContainer: Selection<any> = this.visibleGroupContainer,
+      rowHeight: number = options.rowHeight || TableView.defaultRowHeight,
+      groupedData: TableViewGroupedData = this.getGroupedData(),
+      rowSelection: Selection<any>,
+      cellSelection: Selection<any>;
 
-        for (let i: number = 0; i < rows; i++) {
-            let currentRow: any[] = data[i];
+    rowSelection = visibleGroupContainer
+      .selectAll(TableView.RowSelector.selectorName)
+      .data(<SampleSlicerDataPoint[][]>groupedData.data);
 
-            if (currentRow && currentRow.length > columns) {
-                columns = currentRow.length;
-            }
-        }
+    rowSelection
+      .exit()
+      .call((d) => options.onExit(d))
+      .remove();
 
-        return {
-            columns: columns,
-            rows: rows
-        };
-    }
+    let rowSelectionEnter = rowSelection
+      .enter()
+      .append("div")
+      .classed(TableView.RowSelector.className, true)
+      .style("width", null);
 
-    public render(): void {
-        let options: TableViewOptions = this.options,
-            visibleGroupContainer: Selection<any> = this.visibleGroupContainer,
-            rowHeight: number = options.rowHeight || TableView.defaultRowHeight,
-            groupedData: TableViewGroupedData = this.getGroupedData(),
-            rowSelection: Selection<any>,
-            cellSelection: Selection<any>;
+    rowSelection = rowSelection.merge(rowSelectionEnter);
 
-            rowSelection = visibleGroupContainer
-                .selectAll(TableView.RowSelector.selectorName)
-                .data(<SampleSlicerDataPoint[][]>groupedData.data);
+    cellSelection = rowSelection
+      .selectAll(TableView.CellSelector.selectorName)
+      .data((dataPoints: SampleSlicerDataPoint[]) => {
+        return dataPoints;
+      });
 
-            rowSelection
-                .exit()
-                .call(d => options.onExit(d))
-                .remove();
-            
-            let rowSelectionEnter = rowSelection
-                .enter()
-                .append("div")
-                .classed(TableView.RowSelector.className, true)
-                .style('width', null);
+    cellSelection.exit().remove();
 
-            rowSelection = rowSelection.merge(rowSelectionEnter);
+    let cellSelectionEnter = cellSelection
+      .enter()
+      .append("div")
+      .classed(TableView.CellSelector.className, true)
+      .style("height", rowHeight > 0 ? `${rowHeight}px` : "auto")
+      .style(
+        "width",
+        options.columnWidth > 0
+          ? `${options.columnWidth}px`
+          : `${100 / groupedData.totalColumns}%`
+      );
 
-            cellSelection = rowSelection
-                .selectAll(TableView.CellSelector.selectorName)
-                .data((dataPoints: SampleSlicerDataPoint[]) => {
-                    return dataPoints;
-                });
+    cellSelection = cellSelection.merge(cellSelectionEnter);
 
-            cellSelection.exit().remove();
+    cellSelection.call((selection: Selection<any>) => {
+      options.onEnter(selection);
+    });
 
-            let cellSelectionEnter = 
-                cellSelection
-                .enter()
-                .append('div')
-                .classed(TableView.CellSelector.className, true)
-                .style('height', (rowHeight > 0) ? `${rowHeight}px` : 'auto')
-                .style('width', (options.columnWidth > 0)
-                    ? `${options.columnWidth}px`
-                    : `${100 / groupedData.totalColumns}%`)
-            
-            cellSelection = cellSelection.merge(cellSelectionEnter)
-            
-            
-            cellSelection
-                .call((selection: Selection<any>) => {
-                    options.onEnter(selection);
-                });
-            
-            cellSelection
-                .call((selection: Selection<any>) => {
-                    options.onUpdate(selection);
-                });
-    }
+    cellSelection.call((selection: Selection<any>) => {
+      options.onUpdate(selection);
+    });
+  }
 }

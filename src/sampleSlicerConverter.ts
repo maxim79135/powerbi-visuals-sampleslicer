@@ -39,73 +39,102 @@ import ISelectionId = powerbiVisualsApi.visuals.ISelectionId;
 import { SampleSlicerDataPoint } from "./sampleSlicer";
 import { ScalableRange } from "./scalableRange";
 
-
 export class SampleSlicerConverter {
-    public dataPoints: SampleSlicerDataPoint[];
+  public dataPoints: SampleSlicerDataPoint[];
 
-    private dataViewCategorical: DataViewCategorical;
-    private category: DataViewCategoryColumn;
-    private categoryValues: any[];
-    private host: IVisualHost;
-    private jsonFilters: powerbiVisualsApi.IFilter[];
+  private dataViewCategorical: DataViewCategorical;
+  private category: DataViewCategoryColumn;
+  private categoryValues: any[];
+  private host: IVisualHost;
+  private jsonFilters: powerbiVisualsApi.IFilter[];
 
-    public constructor(dataView: DataView, host: IVisualHost, jsonFilters: powerbiVisualsApi.IFilter[]) {
-        const dataViewCategorical: DataViewCategorical = dataView.categorical;
-        this.dataViewCategorical = dataViewCategorical;
-        this.host = host;
-        this.jsonFilters = jsonFilters;
-        if (dataViewCategorical.categories && dataViewCategorical.categories.length > 0) {
-            this.category = dataViewCategorical.categories[0];
-            this.categoryValues = this.category.values;
-        }
-        this.dataPoints = [];
+  public constructor(
+    dataView: DataView,
+    host: IVisualHost,
+    jsonFilters: powerbiVisualsApi.IFilter[]
+  ) {
+    const dataViewCategorical: DataViewCategorical = dataView.categorical;
+    this.dataViewCategorical = dataViewCategorical;
+    this.host = host;
+    this.jsonFilters = jsonFilters;
+    if (
+      dataViewCategorical.categories &&
+      dataViewCategorical.categories.length > 0
+    ) {
+      this.category = dataViewCategorical.categories[0];
+      this.categoryValues = this.category.values;
     }
+    this.dataPoints = [];
+  }
 
-    public convert(scalableRange: ScalableRange): void {
-        this.dataPoints = [];
+  public convert(scalableRange: ScalableRange): void {
+    this.dataPoints = [];
 
-        if (this.categoryValues) {
-            for (let categoryIndex: number = 0, categoryCount = this.categoryValues.length; categoryIndex < categoryCount; categoryIndex++) {
-                let categoryValue: any = this.categoryValues[categoryIndex];
+    if (this.categoryValues) {
+      for (
+        let categoryIndex: number = 0,
+          categoryCount = this.categoryValues.length;
+        categoryIndex < categoryCount;
+        categoryIndex++
+      ) {
+        let categoryValue: any = this.categoryValues[categoryIndex];
 
-                let categorySelectionId: ISelectionId = this.host.createSelectionIdBuilder()
-                    .withCategory(this.category, categoryIndex)
-                    .createSelectionId();
+        let categorySelectionId: ISelectionId = this.host
+          .createSelectionIdBuilder()
+          .withCategory(this.category, categoryIndex)
+          .createSelectionId();
 
-                let selected = !this.jsonFilters ? false : this.jsonFilters.reduce<boolean>(
-                    (acc: boolean, currentFilter: { operator: string, values: any[] }, index: number) => { 
-                        return acc || (
-                            currentFilter.operator === "In" 
-                            && currentFilter.values 
-                            && currentFilter.values.indexOf 
-                            && (currentFilter.values.indexOf(categoryValue.toString()) !== -1)
-                        ); 
-                    }, 
-                    false);
+        let selected = !this.jsonFilters
+          ? false
+          : this.jsonFilters.reduce<boolean>(
+              (
+                acc: boolean,
+                currentFilter: { operator: string; values: any[] },
+                index: number
+              ) => {
+                return (
+                  acc ||
+                  (currentFilter.operator === "In" &&
+                    currentFilter.values &&
+                    currentFilter.values.indexOf &&
+                    currentFilter.values.indexOf(categoryValue.toString()) !==
+                      -1)
+                );
+              },
+              false
+            );
 
-                this.dataPoints.push({
-                    identity: categorySelectionId as ISelectionId,
-                    category: categoryValue,
-                    selected: selected,
-                    filtered: false,
-                    isSelectedRangePoint: scalableRange.isActive() && SampleSlicerConverter.isNumberWithinRange(categoryValue, scalableRange.getValue())
-                });
-            }
+        this.dataPoints.push({
+          identity: categorySelectionId as ISelectionId,
+          category: categoryValue,
+          selected: selected,
+          filtered: false,
+          isSelectedRangePoint:
+            scalableRange.isActive() &&
+            SampleSlicerConverter.isNumberWithinRange(
+              categoryValue,
+              scalableRange.getValue()
+            ),
+        });
+      }
 
-            scalableRange.setScalingTransformationDomain({
-                min: d3min(this.categoryValues),
-                max: d3max(this.categoryValues),
-            });
-        }
+      scalableRange.setScalingTransformationDomain({
+        min: d3min(this.categoryValues),
+        max: d3max(this.categoryValues),
+      });
     }
+  }
 
-    private static isNumberWithinRange(theNumber: number, subRange: ValueRange<number>): boolean {
-        if ((subRange.min || subRange.min === 0) && subRange.min >= theNumber) {
-            return false;
-        }
-        if ((subRange.max || subRange.max === 0) && subRange.max <= theNumber) {
-            return false;
-        }
-        return true;
+  private static isNumberWithinRange(
+    theNumber: number,
+    subRange: ValueRange<number>
+  ): boolean {
+    if ((subRange.min || subRange.min === 0) && subRange.min >= theNumber) {
+      return false;
     }
+    if ((subRange.max || subRange.max === 0) && subRange.max <= theNumber) {
+      return false;
+    }
+    return true;
+  }
 }

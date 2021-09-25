@@ -62,147 +62,160 @@ import { Settings } from "./settings";
 import { ScalableRange } from "./scalableRange";
 import { SampleSlicerDataPoint, SampleSlicerCallbacks } from "./sampleSlicer";
 
-export interface SampleSlicerBehaviorOptions extends IFilterBehaviorOptions{ 
-    slicerItemContainers: Selection<FilterDataPoint>;
-    dataPoints: SampleSlicerDataPoint[];
-    interactivityService: IInteractivityService<any>;
-    slicerSettings: Settings;
+export interface SampleSlicerBehaviorOptions extends IFilterBehaviorOptions {
+  slicerItemContainers: Selection<FilterDataPoint>;
+  dataPoints: SampleSlicerDataPoint[];
+  interactivityService: IInteractivityService<any>;
+  slicerSettings: Settings;
 }
 
 export class SelectionBehavior implements IInteractiveBehavior {
-    /* discrete selection model*/
-    private selectionHandler: ISelectionHandler;
-    /* range selection model*/
-    public scalableRange: ScalableRange;
+  /* discrete selection model*/
+  private selectionHandler: ISelectionHandler;
+  /* range selection model*/
+  public scalableRange: ScalableRange;
 
-    private slicers: Selection<FilterDataPoint>;
-    private interactivityService: IInteractivityService<any>;
-    private slicerSettings: Settings;
-    private options: SampleSlicerBehaviorOptions;
-    private dataPoints: SampleSlicerDataPoint[];
-    private callbacks: SampleSlicerCallbacks;
+  private slicers: Selection<FilterDataPoint>;
+  private interactivityService: IInteractivityService<any>;
+  private slicerSettings: Settings;
+  private options: SampleSlicerBehaviorOptions;
+  private dataPoints: SampleSlicerDataPoint[];
+  private callbacks: SampleSlicerCallbacks;
 
-    private static mapDataPointsToFilterValues (dataPoints: SampleSlicerDataPoint[]): any[] {
-        return (dataPoints
-            .map( (dataPoint: SampleSlicerDataPoint) => (dataPoint.category || null) ) || [])
-            .filter( (value: string | number | null ) => (typeof value === 'string' || typeof value === 'number') )
-    }
+  private static mapDataPointsToFilterValues(
+    dataPoints: SampleSlicerDataPoint[]
+  ): any[] {
+    return (
+      dataPoints.map(
+        (dataPoint: SampleSlicerDataPoint) => dataPoint.category || null
+      ) || []
+    ).filter(
+      (value: string | number | null) =>
+        typeof value === "string" || typeof value === "number"
+    );
+  }
 
-    constructor(callbacks: SampleSlicerCallbacks) {
-        this.scalableRange = new ScalableRange();
-        this.callbacks = callbacks;
-    }
+  constructor(callbacks: SampleSlicerCallbacks) {
+    this.scalableRange = new ScalableRange();
+    this.callbacks = callbacks;
+  }
 
-    /**
+  /**
         Implementation of IInteractiveBehavior i/f
     */
-    public bindEvents(options: SampleSlicerBehaviorOptions, selectionHandler: ISelectionHandler): void {
-        const slicers: Selection<FilterDataPoint> = this.slicers = options.slicerItemContainers;
+  public bindEvents(
+    options: SampleSlicerBehaviorOptions,
+    selectionHandler: ISelectionHandler
+  ): void {
+    const slicers: Selection<FilterDataPoint> = (this.slicers =
+      options.slicerItemContainers);
 
-        this.dataPoints = options.dataPoints;
-        this.interactivityService = options.interactivityService;
-        this.slicerSettings = options.slicerSettings;
-        this.options = options;
+    this.dataPoints = options.dataPoints;
+    this.interactivityService = options.interactivityService;
+    this.slicerSettings = options.slicerSettings;
+    this.options = options;
 
-        this.selectionHandler = selectionHandler;
-        slicers.on("click", ( dataPoint: SampleSlicerDataPoint, _index: number) => {
-            (d3Event as MouseEvent).preventDefault();
-            this.clearRangeSelection();
+    this.selectionHandler = selectionHandler;
+    slicers.on("click", (dataPoint: SampleSlicerDataPoint, _index: number) => {
+      (d3Event as MouseEvent).preventDefault();
+      this.clearRangeSelection();
 
-            /* update selection state */
-            selectionHandler.handleSelection(dataPoint, true /* isMultiSelect */);
-            
-            /* send selection state to the host*/
-            let filterValues = SelectionBehavior.mapDataPointsToFilterValues(this.dataPoints.filter((dataPoint) => dataPoint.selected));
+      /* update selection state */
+      selectionHandler.handleSelection(dataPoint, true /* isMultiSelect */);
 
-            if (filterValues.length === 0) {
-                this.clearFilters();
-            }
-            else {
-                let filter: IBasicFilter = {
-                    $schema: "http://powerbi.com/product/schema#basic",
-                    ...(new BasicFilter(
-                        this.callbacks.getFilterColumnTarget(), 
-                        "In",
-                        filterValues 
-                    ))
-                };
-                
-                this.callbacks.applyFilter(filter);
-            }
-        });
-    }
-    
-    /**
-        Implementation of IInteractiveBehavior i/f
-    */
-    public renderSelection(hasSelection: boolean): void {
-        if (!hasSelection && !this.interactivityService.isSelectionModeInverted()) {
-            this.slicers.style(
-                "background",
-                this.slicerSettings.slicerText.unselectedColor);
-        }
-        else {
-            this.styleSlicerInputs(this.slicers, hasSelection);
-        }
-    }
+      /* send selection state to the host*/
+      let filterValues = SelectionBehavior.mapDataPointsToFilterValues(
+        this.dataPoints.filter((dataPoint) => dataPoint.selected)
+      );
 
-    public clearAllDiscreteSelections() {
-        /* update state to clear all selections */
-        if (this.selectionHandler) {
-            this.selectionHandler.handleClearSelection();
-        }
-    }
-
-    public clearRangeSelection(): void {
-        this.scalableRange = new ScalableRange();
-    }
-
-    public styleSlicerInputs(slicers: Selection<any>, _hasSelection: boolean) {
-        let settings = this.slicerSettings;
-        slicers.each(function (dataPoint: SampleSlicerDataPoint) {
-            d3Select(this)
-                .style("background", (dataPoint.selected || dataPoint.isSelectedRangePoint)
-                    ? settings.slicerText.selectedColor
-                    : settings.slicerText.unselectedColor
-                );
-        });
-    }
-
-    public updateOnRangeSelectonChange(): void {
-        this.clearAllDiscreteSelections();
-
-        let value: ValueRange<number> = this.scalableRange.getValue();
-        if (!value.min && value.min !== 0 && !value.max && value.max !== 0) {
-            return;
-        }
-
-        let conditions: IAdvancedFilterCondition[] = [];
-        let target: IFilterColumnTarget = this.callbacks.getFilterColumnTarget();
-
-        if (value.min || value.min === 0) {
-            conditions.push({
-                operator: "GreaterThan",
-                value: value.min
-            });
-        }
-
-        if (value.max || value.max === 0) {
-            conditions.push({
-                operator: "LessThan",
-                value: value.max
-            });
-        }
-
-        let filter: IAdvancedFilter = {
-          $schema: "http://powerbi.com/product/schema#advanced",
-          ...(new AdvancedFilter(target, "And", conditions))
-        }
+      if (filterValues.length === 0) {
+        this.clearFilters();
+      } else {
+        let filter: IBasicFilter = {
+          $schema: "http://powerbi.com/product/schema#basic",
+          ...new BasicFilter(
+            this.callbacks.getFilterColumnTarget(),
+            "In",
+            filterValues
+          ),
+        };
 
         this.callbacks.applyFilter(filter);
+      }
+    });
+  }
+
+  /**
+        Implementation of IInteractiveBehavior i/f
+    */
+  public renderSelection(hasSelection: boolean): void {
+    if (!hasSelection && !this.interactivityService.isSelectionModeInverted()) {
+      this.slicers.style(
+        "background",
+        this.slicerSettings.slicerText.unselectedColor
+      );
+    } else {
+      this.styleSlicerInputs(this.slicers, hasSelection);
+    }
+  }
+
+  public clearAllDiscreteSelections() {
+    /* update state to clear all selections */
+    if (this.selectionHandler) {
+      this.selectionHandler.handleClearSelection();
+    }
+  }
+
+  public clearRangeSelection(): void {
+    this.scalableRange = new ScalableRange();
+  }
+
+  public styleSlicerInputs(slicers: Selection<any>, _hasSelection: boolean) {
+    let settings = this.slicerSettings;
+    slicers.each(function (dataPoint: SampleSlicerDataPoint) {
+      d3Select(this).style(
+        "background",
+        dataPoint.selected || dataPoint.isSelectedRangePoint
+          ? settings.slicerText.selectedColor
+          : settings.slicerText.unselectedColor
+      );
+    });
+  }
+
+  public updateOnRangeSelectonChange(): void {
+    this.clearAllDiscreteSelections();
+
+    let value: ValueRange<number> = this.scalableRange.getValue();
+    if (!value.min && value.min !== 0 && !value.max && value.max !== 0) {
+      return;
     }
 
-    public clearFilters(): void {
-        this.callbacks.applyFilter(null);
+    let conditions: IAdvancedFilterCondition[] = [];
+    let target: IFilterColumnTarget = this.callbacks.getFilterColumnTarget();
+
+    if (value.min || value.min === 0) {
+      conditions.push({
+        operator: "GreaterThan",
+        value: value.min,
+      });
     }
+
+    if (value.max || value.max === 0) {
+      conditions.push({
+        operator: "LessThan",
+        value: value.max,
+      });
+    }
+
+    let filter: IAdvancedFilter = {
+      $schema: "http://powerbi.com/product/schema#advanced",
+      ...new AdvancedFilter(target, "And", conditions),
+    };
+
+    this.callbacks.applyFilter(filter);
+  }
+
+  public clearFilters(): void {
+    this.callbacks.applyFilter(null);
+  }
 }
